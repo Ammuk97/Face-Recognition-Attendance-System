@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request
+import pandas as pd
+import sqlite3
+
+from flask import Flask, render_template, request, send_file
 from database_manager import add_student
 from register import capture_faces
 
 app = Flask(__name__)
-
 
 # ---------------- HOME PAGE ---------------- #
 
@@ -19,16 +21,13 @@ def register():
 
     if request.method == "POST":
 
-        # Get data from form
         name = request.form["name"]
         roll = request.form["roll"]
 
-        # Save to database
         success = add_student(name, roll)
 
         if success:
 
-            # Open webcam and capture face images
             capture_faces(name, roll)
 
             return f"""
@@ -52,12 +51,9 @@ def register():
                         <hr>
 
                         <h4>Name : {name}</h4>
-
                         <h4>Roll Number : {roll}</h4>
 
                         <p>50 face images have been captured successfully.</p>
-
-                        <br>
 
                         <a href="/" class="btn btn-primary">
                             Back to Home
@@ -91,8 +87,6 @@ def register():
                             ❌ Roll Number Already Exists
                         </h2>
 
-                        <br>
-
                         <a href="/register" class="btn btn-warning">
                             Try Again
                         </a>
@@ -106,6 +100,86 @@ def register():
             """
 
     return render_template("register.html")
+
+
+# ---------------- ATTENDANCE DASHBOARD ---------------- #
+
+@app.route("/attendance")
+def attendance():
+
+    search = request.args.get("search", "").strip()
+    date = request.args.get("date", "").strip()
+
+    conn = sqlite3.connect("database/attendance.db")
+    cursor = conn.cursor()
+
+    query = """
+        SELECT roll, name, date, time, status
+        FROM attendance
+        WHERE 1=1
+    """
+
+    params = []
+
+    if search:
+        query += " AND (name LIKE ? OR roll LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%"])
+
+    if date:
+        query += " AND date=?"
+        params.append(date)
+
+    query += " ORDER BY date DESC, time DESC"
+
+    cursor.execute(query, params)
+
+    records = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) FROM students")
+    total_students = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM attendance")
+    total_attendance = cursor.fetchone()[0]
+
+    conn.close()
+
+    return render_template(
+        "attendance.html",
+        records=records,
+        total_students=total_students,
+        total_attendance=total_attendance,
+        search=search,
+        date=date
+    )
+
+
+# ---------------- EXPORT ATTENDANCE CSV ---------------- #
+
+@app.route("/export")
+def export():
+
+    conn = sqlite3.connect("database/attendance.db")
+
+    df = pd.read_sql_query(
+        """
+        SELECT roll, name, date, time, status
+        FROM attendance
+        ORDER BY date DESC, time DESC
+        """,
+        conn
+    )
+
+    conn.close()
+
+    file_name = "attendance_report.csv"
+
+    df.to_csv(file_name, index=False)
+
+    return send_file(
+        file_name,
+        as_attachment=True,
+        download_name="attendance_report.csv"
+    )
 
 
 # ---------------- START FLASK ---------------- #

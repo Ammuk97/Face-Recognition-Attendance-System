@@ -1,4 +1,19 @@
+# Virtual Environments
 venv/
+venv311/
+
+# Python Cache
 __pycache__/
 *.pyc
-.vscode/
+
+# Database
+database/*.db
+
+# Dataset
+dataset/
+
+# Trained Models
+models/*.pkl
+
+# Generated Reports
+attendance_report.csv
