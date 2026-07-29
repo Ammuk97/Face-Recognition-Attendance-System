@@ -5,9 +5,19 @@ import sys
 import sqlite3
 import pandas as pd
 
+from datetime import date
+
+from flask import (
+    Flask,
+    render_template,
+    request,
+    send_file,
+    redirect,
+    url_for,
+)
+
 from database_manager import add_student
 from register import capture_faces
-from flask import Flask, render_template, request, send_file, redirect, url_for
 
 app = Flask(__name__)
 
@@ -41,31 +51,31 @@ def register():
             return f"""
             <html>
             <head>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
             </head>
 
             <body class="bg-light">
 
             <div class="container mt-5">
 
-            <div class="card shadow p-4">
+                <div class="card shadow p-4">
 
-            <h2 class="text-success">
-            Student Registered Successfully
-            </h2>
+                    <h2 class="text-success">
+                        Student Registered Successfully
+                    </h2>
 
-            <hr>
+                    <hr>
 
-            <h4>Name : {name}</h4>
-            <h4>Roll Number : {roll}</h4>
+                    <h4>Name : {name}</h4>
+                    <h4>Roll Number : {roll}</h4>
 
-            <p>Face images captured successfully.</p>
+                    <p>Face images captured successfully.</p>
 
-            <a href="/" class="btn btn-primary">
-            Back Home
-            </a>
+                    <a href="/" class="btn btn-primary">
+                        Back Home
+                    </a>
 
-            </div>
+                </div>
 
             </div>
 
@@ -77,8 +87,8 @@ def register():
 
             return """
             <script>
-            alert("Roll Number Already Exists!");
-            window.location="/register";
+                alert("Roll Number Already Exists!");
+                window.location="/register";
             </script>
             """
 
@@ -93,7 +103,7 @@ def register():
 def attendance():
 
     search = request.args.get("search", "").strip()
-    date = request.args.get("date", "").strip()
+    filter_date = request.args.get("date", "").strip()
 
     conn = sqlite3.connect("database/attendance.db")
     cursor = conn.cursor()
@@ -108,11 +118,14 @@ def attendance():
 
     if search:
         query += " AND (name LIKE ? OR roll LIKE ?)"
-        params.extend([f"%{search}%", f"%{search}%"])
+        params.extend([
+            f"%{search}%",
+            f"%{search}%"
+        ])
 
-    if date:
+    if filter_date:
         query += " AND date=?"
-        params.append(date)
+        params.append(filter_date)
 
     query += " ORDER BY date DESC,time DESC"
 
@@ -126,6 +139,42 @@ def attendance():
     cursor.execute("SELECT COUNT(*) FROM attendance")
     total_attendance = cursor.fetchone()[0]
 
+        # ==========================================================
+    # DASHBOARD ANALYTICS
+    # ==========================================================
+
+    today = date.today().strftime("%Y-%m-%d")
+
+    cursor.execute(
+        "SELECT COUNT(DISTINCT roll) FROM attendance WHERE date=?",
+        (today,)
+    )
+
+    present_today = cursor.fetchone()[0]
+
+    attendance_percentage = 0
+
+    if total_students > 0:
+        attendance_percentage = round(
+            (present_today / total_students) * 100,
+            2
+        )
+
+    cursor.execute("""
+        SELECT date, COUNT(*)
+        FROM attendance
+        GROUP BY date
+        ORDER BY date DESC
+        LIMIT 7
+    """)
+
+    chart_data = cursor.fetchall()
+
+    chart_data.reverse()
+
+    chart_labels = [row[0] for row in chart_data]
+    chart_values = [row[1] for row in chart_data]
+
     conn.close()
 
     return render_template(
@@ -134,7 +183,11 @@ def attendance():
         total_students=total_students,
         total_attendance=total_attendance,
         search=search,
-        date=date,
+        date=filter_date,
+        present_today=present_today,
+        attendance_percentage=attendance_percentage,
+        chart_labels=chart_labels,
+        chart_values=chart_values
     )
 
 
@@ -149,11 +202,11 @@ def export():
 
     df = pd.read_sql_query(
         """
-        SELECT roll,name,date,time,status
+        SELECT roll, name, date, time, status
         FROM attendance
-        ORDER BY date DESC,time DESC
+        ORDER BY date DESC, time DESC
         """,
-        conn,
+        conn
     )
 
     conn.close()
@@ -165,7 +218,7 @@ def export():
     return send_file(
         filename,
         as_attachment=True,
-        download_name="attendance_report.csv",
+        download_name="attendance_report.csv"
     )
 
 
@@ -182,8 +235,8 @@ def start_attendance():
 
     return """
     <script>
-    alert("Attendance Recognition Started");
-    window.location="/attendance";
+        alert("Attendance Recognition Started!");
+        window.location.href="/attendance";
     </script>
     """
 
@@ -199,7 +252,7 @@ def students():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT id,roll,name
+        SELECT id, roll, name
         FROM students
         ORDER BY id
     """)
@@ -210,7 +263,7 @@ def students():
 
     return render_template(
         "students.html",
-        students=students,
+        students=students
     )
 
 
@@ -224,17 +277,31 @@ def delete_student(id):
     conn = sqlite3.connect("database/attendance.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT roll,name FROM students WHERE id=?", (id,))
+    cursor.execute(
+        "SELECT roll, name FROM students WHERE id=?",
+        (id,)
+    )
+
     student = cursor.fetchone()
 
     if student:
+
         roll, name = student
 
-        cursor.execute("DELETE FROM attendance WHERE roll=?", (roll,))
-        cursor.execute("DELETE FROM students WHERE id=?", (id,))
+        cursor.execute(
+            "DELETE FROM attendance WHERE roll=?",
+            (roll,)
+        )
+
+        cursor.execute(
+            "DELETE FROM students WHERE id=?",
+            (id,)
+        )
+
         conn.commit()
 
         folder = f"dataset/{roll}_{name}"
+
         if os.path.exists(folder):
             shutil.rmtree(folder)
 
@@ -242,39 +309,72 @@ def delete_student(id):
 
     return """
     <script>
-    alert("Student Deleted Successfully!");
-    window.location="/students";
+        alert("Student Deleted Successfully!");
+        window.location.href="/students";
     </script>
     """
-
-
 # ==========================================================
 # EDIT STUDENT
 # ==========================================================
 
-@app.route("/edit_student/<int:id>", methods=["GET","POST"])
+@app.route("/edit_student/<int:id>", methods=["GET", "POST"])
 def edit_student(id):
 
     conn = sqlite3.connect("database/attendance.db")
     cursor = conn.cursor()
 
     if request.method == "POST":
-        name=request.form["name"]
-        roll=request.form["roll"]
 
+        name = request.form["name"]
+        roll = request.form["roll"]
+
+        # Update student table
         cursor.execute(
-            "UPDATE students SET name=?, roll=? WHERE id=?",
+            """
+            UPDATE students
+            SET name=?, roll=?
+            WHERE id=?
+            """,
             (name, roll, id)
         )
+
+        # Update attendance table also
+        cursor.execute(
+            """
+            UPDATE attendance
+            SET name=?, roll=?
+            WHERE roll=(
+                SELECT roll
+                FROM students
+                WHERE id=?
+            )
+            """,
+            (name, roll, id)
+        )
+
         conn.commit()
         conn.close()
+
         return redirect(url_for("students"))
 
-    cursor.execute("SELECT id, roll, name FROM students WHERE id=?", (id,))
-    student=cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT id, roll, name
+        FROM students
+        WHERE id=?
+        """,
+        (id,)
+    )
+
+    student = cursor.fetchone()
+
     conn.close()
 
-    return render_template("edit_student.html", student=student)
+    return render_template(
+        "edit_student.html",
+        student=student
+    )
+
 
 # ==========================================================
 # MAIN
