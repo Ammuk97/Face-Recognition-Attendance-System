@@ -1,3 +1,5 @@
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
 import os
 import shutil
 import subprocess
@@ -230,7 +232,7 @@ def export():
 def start_attendance():
 
     subprocess.Popen(
-        [sys.executable, "services/recognize_face.py"]
+        [sys.executable, "-m", "services.recognize_face"]
     )
 
     return """
@@ -239,6 +241,51 @@ def start_attendance():
         window.location.href="/attendance";
     </script>
     """
+
+
+# ==========================================================
+# ATTENDANCE REPORT
+# ==========================================================
+
+@app.route("/attendance_report")
+def attendance_report():
+
+    conn = sqlite3.connect("database/attendance.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT DISTINCT roll, name FROM attendance")
+    students = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(DISTINCT date) FROM attendance")
+    total_days = cursor.fetchone()[0] or 0
+
+    report = []
+
+    for roll, name in students:
+        cursor.execute(
+            "SELECT COUNT(*) FROM attendance WHERE roll=?",
+            (roll,)
+        )
+        present_days = cursor.fetchone()[0] or 0
+
+        percentage = 0
+        if total_days > 0:
+            percentage = round((present_days / total_days) * 100, 2)
+
+        report.append({
+            "roll": roll,
+            "name": name,
+            "present": present_days,
+            "total": total_days,
+            "percentage": percentage,
+        })
+
+    conn.close()
+
+    return render_template(
+        "attendance_report.html",
+        report=report
+    )
 
 
 # ==========================================================
@@ -328,6 +375,14 @@ def edit_student(id):
         name = request.form["name"]
         roll = request.form["roll"]
 
+        # Get current roll for this student so attendance can be updated
+        cursor.execute(
+            "SELECT roll FROM students WHERE id=?",
+            (id,)
+        )
+        res = cursor.fetchone()
+        old_roll = res[0] if res else None
+
         # Update student table
         cursor.execute(
             """
@@ -338,19 +393,16 @@ def edit_student(id):
             (name, roll, id)
         )
 
-        # Update attendance table also
-        cursor.execute(
-            """
-            UPDATE attendance
-            SET name=?, roll=?
-            WHERE roll=(
-                SELECT roll
-                FROM students
-                WHERE id=?
+        # Update attendance table also (use old roll)
+        if old_roll:
+            cursor.execute(
+                """
+                UPDATE attendance
+                SET name=?, roll=?
+                WHERE roll=?
+                """,
+                (name, roll, old_roll)
             )
-            """,
-            (name, roll, id)
-        )
 
         conn.commit()
         conn.close()
@@ -379,6 +431,69 @@ def edit_student(id):
 # ==========================================================
 # MAIN
 # ==========================================================
+# ==========================================================
+# GENERATE PDF REPORT
+# ==========================================================
+
+@app.route("/generate_pdf")
+def generate_pdf():
+
+    conn = sqlite3.connect("database/attendance.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT roll, name, date, time, status
+        FROM attendance
+        ORDER BY date DESC, time DESC
+    """)
+
+    records = cursor.fetchall()
+    conn.close()
+
+    filename = "attendance_report.pdf"
+
+    pdf = SimpleDocTemplate(filename)
+
+    data = [["Roll No", "Name", "Date", "Time", "Status"]]
+
+    for row in records:
+        data.append(list(row))
+
+    table = Table(data)
+
+    table.setStyle(TableStyle([
+    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0d6efd")),
+    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ("FONTSIZE", (0, 0), (-1, -1), 10),
+    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+    ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+]))
+
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    styles = getSampleStyleSheet()
+
+    title = Paragraph(
+        "<b><font size=18>Smart Attendance System</font></b>",
+        styles["Title"]
+    )
+
+    subtitle = Paragraph(
+        "Attendance Report",
+        styles["Heading2"]
+    )
+
+    pdf.build([title, subtitle, table])
+
+    return send_file(
+        filename,
+        as_attachment=True,
+        download_name="attendance_report.pdf"
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)

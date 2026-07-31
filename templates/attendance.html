@@ -22,42 +22,42 @@
 
     <!-- Statistics -->
 
-    <div class="row mb-4">
+    <div class="row mb-4 g-3">
 
-        <div class="col-md-6">
-
+        <div class="col-md-3">
             <div class="card shadow text-center">
-
                 <div class="card-body">
-
                     <h5>Total Students</h5>
-
-                    <h2 class="text-success">
-                        {{ total_students }}
-                    </h2>
-
+                    <h2 class="text-success">{{ total_students }}</h2>
                 </div>
-
             </div>
-
         </div>
 
-        <div class="col-md-6">
-
+        <div class="col-md-3">
             <div class="card shadow text-center">
-
                 <div class="card-body">
-
-                    <h5>Total Attendance Records</h5>
-
-                    <h2 class="text-primary">
-                        {{ total_attendance }}
-                    </h2>
-
+                    <h5>Total Attendance</h5>
+                    <h2 class="text-primary">{{ total_attendance }}</h2>
                 </div>
-
             </div>
+        </div>
 
+        <div class="col-md-3">
+            <div class="card shadow text-center">
+                <div class="card-body">
+                    <h5>Present Today</h5>
+                    <h2 class="text-warning">{{ present_today }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow text-center">
+                <div class="card-body">
+                    <h5>Attendance %</h5>
+                    <h2 class="text-danger">{{ attendance_percentage }}%</h2>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -97,12 +97,8 @@
 
                     <div class="col-md-3">
 
-                        <button
-                            class="btn btn-primary w-100"
-                            type="submit">
-
+                        <button class="btn btn-primary w-100" type="submit">
                             Search
-
                         </button>
 
                     </div>
@@ -136,13 +132,11 @@
                     <thead class="table-dark">
 
                         <tr>
-
                             <th>Roll No</th>
                             <th>Name</th>
                             <th>Date</th>
                             <th>Time</th>
                             <th>Status</th>
-
                         </tr>
 
                     </thead>
@@ -161,13 +155,9 @@
                             <td>{{ row[3] }}</td>
 
                             <td>
-
                                 <span class="badge bg-success">
-
                                     {{ row[4] }}
-
                                 </span>
-
                             </td>
 
                         </tr>
@@ -177,13 +167,9 @@
                     {% else %}
 
                         <tr>
-
                             <td colspan="5" class="text-center text-danger">
-
                                 No attendance records found.
-
                             </td>
-
                         </tr>
 
                     {% endif %}
@@ -198,36 +184,93 @@
 
     </div>
 
+    <!-- Attendance Chart -->
+
+    <div class="card shadow mt-4">
+
+        <div class="card-header bg-dark text-white">
+            <h4 class="mb-0">📊 Last 7 Days Attendance</h4>
+        </div>
+
+        <div class="card-body">
+            <canvas id="attendanceChart"></canvas>
+        </div>
+
+    </div>
+
     <!-- Buttons -->
 
-<div class="text-center mt-4">
+    <div class="text-center mt-4">
 
-    <a href="/" class="btn btn-primary">
-        ⬅ Back to Home
-    </a>
+        <a href="/" class="btn btn-primary">
+            ⬅ Back to Home
+        </a>
 
-    <a href="/export" class="btn btn-success ms-2">
-        📥 Export CSV
-    </a>
+        <a href="/export" class="btn btn-success ms-2">
+            📥 Export CSV
+        </a>
 
-    <a href="/attendance_report" class="btn btn-info ms-2">
-        📊 Attendance Report
-    </a>
+        <a href="/generate_pdf" class="btn btn-secondary ms-2">
+    📄 Download PDF
+</a>
 
-    <a href="/students" class="btn btn-warning ms-2">
-        👨‍🎓 Manage Students
-    </a>
+        <a href="/attendance_report" class="btn btn-info ms-2">
+            📊 Attendance Report
+        </a>
 
-    <a href="/start_attendance" class="btn btn-danger ms-2">
-        🎥 Start Attendance
-    </a>
+        <a href="/students" class="btn btn-warning ms-2">
+            👨‍🎓 Manage Students
+        </a>
+
+        <a href="/start_attendance" class="btn btn-danger ms-2">
+            🎥 Start Attendance
+        </a>
+
+    </div>
 
 </div>
 
-</div>
+<script id="attendance-data" type="application/json">
+{
+    "labels": {{ chart_labels | default([]) | tojson | safe }},
+    "values": {{ chart_values | default([]) | tojson | safe }}
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+const attendanceData = JSON.parse(
+    document.getElementById("attendance-data").textContent || "{}"
+);
+
+const ctx = document.getElementById("attendanceChart").getContext('2d');
+
+new Chart(ctx, {
+    type: "bar",
+    data: {
+        labels: attendanceData.labels || [],
+        datasets: [{
+            label: "Attendance",
+            data: attendanceData.values || [],
+            borderWidth: 1,
+            backgroundColor: "rgba(54, 162, 235, 0.5)",
+            borderColor: "rgba(54, 162, 235, 1)"
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+</script>
 
 </body>
 
 </html>
-
-   

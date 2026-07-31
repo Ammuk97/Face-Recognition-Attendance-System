@@ -1,4 +1,4 @@
-from attendance import mark_attendance
+from services.attendance import mark_attendance
 
 import cv2
 import os
