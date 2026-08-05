@@ -9,26 +9,60 @@ import pandas as pd
 
 from datetime import date
 
-from flask import (
-    Flask,
-    render_template,
-    request,
-    send_file,
-    redirect,
-    url_for,
-)
 
+from flask import Flask, render_template, request, send_file, redirect, url_for, session
 from database_manager import add_student
 from register import capture_faces
 
 app = Flask(__name__)
 
+app.secret_key = "smartattendance123"
+
+
+# ==========================================================
+# LOGIN
+# ==========================================================
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    if request.method == "POST":
+
+        username = request.form["username"]
+        password = request.form["password"]
+
+        if username == "admin" and password == "admin123":
+
+            session["logged_in"] = True
+
+            return redirect(url_for("home"))
+
+        return render_template(
+            "login.html",
+            error="Invalid Username or Password"
+        )
+
+    return render_template("login.html")
+# ==========================================================
+# LOGOUT
+# ==========================================================
+
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return redirect(url_for("login"))
 # ==========================================================
 # HOME
 # ==========================================================
 
 @app.route("/")
 def home():
+
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
     return render_template("index.html")
 
 
